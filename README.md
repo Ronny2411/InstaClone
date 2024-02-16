@@ -32,4 +32,4 @@ Dagger Hilt: Streamlined dependency injection for cleaner and more modular code.
 
 This project was a labor of love, combining creativity with technical prowess. Special thanks to the incredible development community for inspiration and support. 🙌
 
-https://github.com/Ronny2411/InstaClone/assets/41182036/13dffe83-60be-41fb-9577-7937a0938301
+https://github.com/Ronny2411/InstaClone/assets/41182036/84a93cfc-128e-4712-9a37-225532a040f7
