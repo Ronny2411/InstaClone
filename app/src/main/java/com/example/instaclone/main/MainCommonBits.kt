@@ -27,6 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,12 +36,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
@@ -200,4 +204,33 @@ fun LikeAnimation(like: Boolean = true){
         colorFilter = ColorFilter.tint(if (like) Color.Red else Color.Gray))
 
     sizeState = LikeIconSize.LARGE
+}
+
+@Composable
+fun CommonRow(imageUrl: String?, name: String?, onItemClick: ()-> Unit){
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .height(75.dp)
+        .clickable { onItemClick.invoke() },
+        verticalAlignment = Alignment.CenterVertically) {
+        
+        CommonImage(data = imageUrl,
+            modifier = Modifier
+                .padding(8.dp)
+                .size(50.dp)
+                .clip(CircleShape)
+                .background(Color.Red)
+        )
+        Text(text = name ?: "---",
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 4.dp))
+    }
+}
+
+@Composable
+fun TitleText(txt: String){
+    Text(text = txt,
+        fontWeight = FontWeight.Bold,
+        fontSize = 35.sp,
+        modifier = Modifier.padding(8.dp))
 }

@@ -6,7 +6,8 @@ data class UserData(
     var username: String? = null,
     var imageUrl: String? = null,
     var bio: String? = null,
-    var following: List<String>? = null
+    var following: List<String>? = null,
+    val fcmToken: String? = null
 ){
     fun toMap() = mapOf(
         "userId" to userId,
@@ -14,6 +15,7 @@ data class UserData(
         "username" to username,
         "imageUrl" to imageUrl,
         "bio" to bio,
-        "following" to following
+        "following" to following,
+        "fcmToken" to fcmToken
     )
 }

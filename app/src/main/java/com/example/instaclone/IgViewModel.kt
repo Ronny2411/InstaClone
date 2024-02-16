@@ -1,40 +1,71 @@
 package com.example.instaclone
 
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.instaclone.data.ChatData
+import com.example.instaclone.data.ChatUser
 import com.example.instaclone.data.CommentData
 import com.example.instaclone.data.Event
+import com.example.instaclone.data.Message
+import com.example.instaclone.data.NotificationBody
 import com.example.instaclone.data.PostData
+import com.example.instaclone.data.SendMessageDto
+import com.example.instaclone.data.Status
 import com.example.instaclone.data.UserData
-import com.example.instaclone.main.navigateTo
+import com.example.instaclone.util.BASE_URL
+import com.example.instaclone.util.CHATS
 import com.example.instaclone.util.COMMENTS
+import com.example.instaclone.util.MESSAGES
 import com.example.instaclone.util.POSTS
+import com.example.instaclone.util.STATUS
 import com.example.instaclone.util.USERS
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.Filter
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.QuerySnapshot
-import com.google.firebase.firestore.toObject
+import com.google.firebase.firestore.ktx.toObject
+import com.google.firebase.firestore.ktx.toObjects
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.FirebaseStorage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
+import retrofit2.create
+import java.io.IOException
+import java.util.Calendar
 import java.util.UUID
 import javax.inject.Inject
+
 
 @HiltViewModel
 class IgViewModel @Inject constructor(
     val auth: FirebaseAuth,
     val db: FirebaseFirestore,
-    val storage: FirebaseStorage
+    val storage: FirebaseStorage,
 ) : ViewModel() {
 
     val isSignIn = mutableStateOf(false)
     val inProgress = mutableStateOf(false)
     val userData = mutableStateOf<UserData?>(null)
     val popUpNotification = mutableStateOf<Event<String>?>(null)
+
+    val chats = mutableStateOf<List<ChatData>>(listOf())
+    val inProgressChats = mutableStateOf(false)
+
+    val chatMessages = mutableStateOf(listOf<Message>())
+    val inProgressChatMessages = mutableStateOf(false)
+    var currentChatMessagesListener: ListenerRegistration? = null
+
+    val status = mutableStateOf<List<Status>>(listOf())
+    val inProgressStatus = mutableStateOf(false)
 
     val usernameState = mutableStateOf("")
     val emailState = mutableStateOf("")
@@ -128,7 +159,8 @@ class IgViewModel @Inject constructor(
         name: String? = null,
         username: String? = null,
         bio: String? = null,
-        imageUrl: String? = null
+        imageUrl: String? = null,
+        fcmToken: String? = null,
     ){
         val uid = auth.currentUser?.uid
         val userData = UserData(
@@ -137,7 +169,8 @@ class IgViewModel @Inject constructor(
             username= username ?: userData.value?.username,
             imageUrl= imageUrl ?: userData.value?.imageUrl,
             bio= bio ?: userData.value?.bio,
-            following = userData.value?.following
+            following = userData.value?.following,
+            fcmToken = fcmToken ?: userData.value?.fcmToken
         )
 
         uid?.let {uid->
@@ -176,6 +209,9 @@ class IgViewModel @Inject constructor(
                 refreshPosts()
                 getPersonalizedFeed()
                 getFollowers(user?.userId)
+                populateChats()
+                populateStatuses()
+                setFCMToken()
             }
             .addOnFailureListener {
                 handleException(it,"Cannot retrieve user data!")
@@ -205,6 +241,7 @@ class IgViewModel @Inject constructor(
         uploadTask.addOnSuccessListener {
             val result = it.metadata?.reference?.downloadUrl
             result?.addOnSuccessListener(onSuccess)
+            inProgress.value = false
         }
             .addOnFailureListener {
                 handleException(exception = it)
@@ -473,6 +510,214 @@ class IgViewModel @Inject constructor(
             .addOnFailureListener {
                 handleException(it)
             }
+    }
+
+    fun onAddChat(username: String){
+        if (username.isEmpty()){
+            handleException(customMessage = "Please Enter User Id")
+        } else {
+            db.collection(CHATS)
+                .where(
+                    Filter.or(
+                        Filter.and(
+                            Filter.equalTo("userOne.username", username),
+                            Filter.equalTo("userTwo.username",userData.value?.username)
+                        ),
+                        Filter.and(
+                            Filter.equalTo("userOne.username",userData.value?.username),
+                            Filter.equalTo("userTwo.username", username)
+                        )
+                    )
+                )
+                .get()
+                .addOnSuccessListener {
+                    if (it.isEmpty){
+                        db.collection(USERS).whereEqualTo("username",username)
+                            .get()
+                            .addOnSuccessListener {
+                                if (it.isEmpty){
+                                    handleException(customMessage = "Cannot Retrieve user")
+                                } else {
+                                    val chatPartner = it.toObjects<UserData>()[0]
+                                    val id = db.collection(CHATS).document().id
+                                    val chat = ChatData(
+                                        id,
+                                        ChatUser(
+                                            userData.value?.userId,
+                                            userData.value?.username,
+                                            userData.value?.name,
+                                            userData.value?.imageUrl
+                                        ),
+                                        ChatUser(
+                                            chatPartner.userId,
+                                            chatPartner.username,
+                                            chatPartner.name,
+                                            chatPartner.imageUrl
+                                        )
+                                    )
+                                    db.collection(CHATS).document(id).set(chat)
+                                }
+                            }
+                            .addOnFailureListener {
+                                handleException(it)
+                            }
+                    } else {
+                        handleException(customMessage = "Chat Already Exists!")
+                    }
+                }
+        }
+    }
+
+    private fun populateChats(){
+        inProgressChats.value = true
+        db.collection(CHATS).where(
+            Filter.or(
+                Filter.equalTo("userOne.username",userData.value?.username),
+                Filter.equalTo("userTwo.username",userData.value?.username)
+            )
+        )
+            .addSnapshotListener{ value, error ->
+                if (error!=null){
+                    handleException(error)
+                }
+                if (value!=null){
+                    chats.value = value.documents.mapNotNull { it.toObject<ChatData>() }
+                    inProgressChats.value = false
+                }
+            }
+    }
+
+    fun onSendReply(chatId: String, message: String){
+        val time = Calendar.getInstance().time.toString()
+        val msg = Message(userData.value?.username,message,time)
+        db.collection(CHATS)
+            .document(chatId)
+            .collection(MESSAGES)
+            .document()
+            .set(msg)
+        sendMessage(chatId,message)
+    }
+
+    fun populateChat(chatId: String){
+        inProgressChatMessages.value = true
+        currentChatMessagesListener = db.collection(CHATS)
+            .document(chatId)
+            .collection(MESSAGES)
+            .addSnapshotListener{value, error->
+                if (error!=null){
+                    handleException(error)
+                }
+                if(value!=null){
+                    chatMessages.value =
+                        value.documents
+                            .mapNotNull { it.toObject<Message>() }
+                            .sortedBy { it.timestamp }
+                    inProgressChatMessages.value = false
+                }
+            }
+    }
+
+    fun depopulateChat(){
+        chatMessages.value = listOf()
+        currentChatMessagesListener = null
+    }
+
+    private fun createStatus(imageUrl: String){
+        val newStatus = Status(
+            ChatUser(
+                userData.value?.userId,
+                userData.value?.username,
+                userData.value?.name,
+                userData.value?.imageUrl
+            ),
+            imageUrl,
+            System.currentTimeMillis()
+        )
+        db.collection(STATUS).document().set(newStatus)
+    }
+
+    fun uploadStatus(imageUri: Uri){
+        uploadImage(imageUri){
+            createStatus(it.toString())
+        }
+    }
+
+    private fun populateStatuses(){
+        inProgressStatus.value = true
+        val millisTimeDelta = 24L * 60 * 60 * 1000
+        val cutoff = System.currentTimeMillis() - millisTimeDelta
+
+        val following = userData.value?.following?.plus(userData.value?.userId)
+        if (!following.isNullOrEmpty()) {
+            db.collection(STATUS)
+                .whereGreaterThan("timeStamp",cutoff)
+                .whereIn("user.userId", following)
+                .addSnapshotListener{ value, error ->
+                    if (error!=null){
+                        handleException(error)
+                    }
+                    if (value!=null){
+                        status.value = value.toObjects()
+                        inProgressStatus.value = false
+                    }
+                }
+        }
+    }
+
+    private fun setFCMToken(){
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task->
+            if (task.isSuccessful){
+                val token = task.result
+                Log.d("token", token)
+                createOrUpdateProfile(fcmToken = token)
+            }
+        }
+    }
+
+
+
+    fun sendMessage(chatId: String, message: String) {
+
+        val api: FCMApi = Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(MoshiConverterFactory.create())
+            .build()
+            .create()
+
+        var token : String? = null
+
+        val chat = db.collection(CHATS).document(chatId).get()
+
+        chat.addOnSuccessListener {
+            val chatData = it.toObject<ChatData>()
+            var userTwoUserId = chatData?.userTwo?.userId
+            if (userData.value?.userId == chatData?.userTwo?.userId){
+                userTwoUserId = chatData?.userOne?.userId
+            }
+            if (userTwoUserId != null) {
+                db.collection(USERS).document(userTwoUserId).get()
+                    .addOnSuccessListener {
+                        val user = it.toObject<UserData>()
+                        token = user?.fcmToken
+                        viewModelScope.launch {
+                            val messageDto = SendMessageDto(
+                                to = token,
+                                notification = NotificationBody(
+                                    title = userData.value?.username ?: "New Message!",
+                                    body = message
+                                )
+                            )
+                            try {
+                                api.sendMessage(messageDto)
+                            } catch(e: HttpException) {
+                                e.printStackTrace()
+                            } catch(e: IOException) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+            }
+        }
     }
 
 }

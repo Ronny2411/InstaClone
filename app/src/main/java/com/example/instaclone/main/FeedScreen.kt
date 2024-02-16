@@ -2,8 +2,12 @@ package com.example.instaclone.main
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.net.Uri
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +37,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material3.BottomAppBar
@@ -61,9 +68,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.instaclone.DestinationScreens
 import com.example.instaclone.IgViewModel
@@ -87,6 +97,16 @@ fun FeedScreen(navController: NavController, vm: IgViewModel){
     val userData = vm.userData.value
     val postsFeedProgress = vm.postsFeedProgress.value
     val postsFeed = vm.postsFeed.value
+    val statuses = vm.status.value
+    val myStatuses = statuses.filter { it.user.userId == userData?.userId }
+    val otherStatuses = statuses.filter { it.user.userId != userData?.userId }
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        uri?.let {
+            vm.uploadStatus(uri)
+        }
+    }
 
     Column(modifier = Modifier
         .fillMaxSize()
@@ -96,8 +116,60 @@ fun FeedScreen(navController: NavController, vm: IgViewModel){
             .wrapContentHeight()
             .background(Color.White)
         ) {
-            UserImageCard(userImage = userData?.imageUrl)
-        }
+            Row(modifier = Modifier.weight(1f)) {
+                    if (myStatuses.isNotEmpty()) {
+                        UserImageCard(userImage = myStatuses[0].user.imageUrl,
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(64.dp)
+                                .clickable {
+                                    navController.navigate(
+                                        DestinationScreens.Status.createRoute
+                                            (myStatuses[0].user.userId)
+                                    )
+                                }
+                        )
+    //                    CommonDivider()
+                    } else {
+                        UserImageCard(userImage = userData?.imageUrl,
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(64.dp)
+                                .clickable {
+                                    launcher.launch("image/*")
+                                })
+                    }
+                    val uniqueUsers = otherStatuses.map { it.user }.toSet().toList()
+                    LazyRow(modifier = Modifier.weight(3f)) {
+                        items(uniqueUsers) { user ->
+                            UserImageCard(userImage = user.imageUrl,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .size(64.dp)
+                                    .clickable {
+                                        navController.navigate(
+                                            DestinationScreens.Status.createRoute
+                                                (user.userId)
+                                        )
+                                    }
+                            )
+                        }
+                    }
+                }
+                Column {
+                    IconButton(onClick = {
+                        navigateTo(navController,
+                            DestinationScreens.ChatList)
+                    }) {
+                        Icon(imageVector = Icons.Default.Send, contentDescription = "Messages")
+                    }
+                    IconButton(onClick = {
+                        launcher.launch("image/*")
+                    }) {
+                        Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Messages")
+                    }
+                }
+            }
 
         PostsList(
             posts = postsFeed,
@@ -109,6 +181,7 @@ fun FeedScreen(navController: NavController, vm: IgViewModel){
         )
 
         BottomNavigation(navController = navController, vm = vm)
+
     }
 
 }
