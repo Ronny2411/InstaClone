@@ -2,6 +2,7 @@ package com.example.instaclone.main
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,12 +16,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,9 +37,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.instaclone.IgViewModel
@@ -105,12 +116,15 @@ fun ChatHeader(name: String, imageUrl: String, onBackClicked: () -> Unit) {
             modifier = Modifier.padding(start = 4.dp)
         )
     }
-//    CommonDivider()
+    Divider(color = Color.LightGray,
+        thickness = 1.dp,
+        modifier = Modifier
+            .alpha(0.3f))
 }
 
 @Composable
 fun Messages(modifier: Modifier, chatMessages: List<Message>, currentUser: String) {
-    LazyColumn(modifier = modifier) {
+    LazyColumn(modifier = modifier, reverseLayout = true) {
         items(chatMessages) { msg ->
             msg.message?.let {
                 val alignment = if (msg.sentBy == currentUser) Alignment.End
@@ -139,19 +153,52 @@ fun Messages(modifier: Modifier, chatMessages: List<Message>, currentUser: Strin
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReplyBox(reply: String, onReplyChange: (String) -> Unit, onSendReply: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-//        CommonDivider()
+    Column{
+        Divider(color = Color.LightGray,
+            thickness = 1.dp,
+            modifier = Modifier
+                .alpha(0.3f))
         Row(modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            TextField(value = reply, onValueChange = onReplyChange, maxLines = 3)
-            Button(onClick = onSendReply) {
-                Text(text = "Send")
-            }
+            .fillMaxWidth()) {
+            TextField(value = reply,
+                onValueChange = onReplyChange,
+                modifier = Modifier
+                    .padding(8.dp)
+                    .fillMaxWidth()
+                    .border(1.dp, Color.LightGray, CircleShape),
+                shape = CircleShape,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Send
+                ),
+                keyboardActions = KeyboardActions (
+                    onSend = {
+                        if (reply.isNotEmpty()){
+                            onSendReply()
+                        }
+                    }
+                ),
+                maxLines = 3,
+                singleLine = true,
+                colors = TextFieldDefaults.textFieldColors(
+                    containerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                ),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        if (reply.isNotEmpty()){
+                            onSendReply()
+                        }
+                    }) {
+                        Icon(imageVector = Icons.Filled.Send, contentDescription = null)
+                    }
+                }
+            )
         }
     }
 }

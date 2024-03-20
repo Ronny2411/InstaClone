@@ -612,6 +612,7 @@ class IgViewModel @Inject constructor(
                         value.documents
                             .mapNotNull { it.toObject<Message>() }
                             .sortedBy { it.timestamp }
+                            .reversed()
                     inProgressChatMessages.value = false
                 }
             }
